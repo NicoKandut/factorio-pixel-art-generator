@@ -4,6 +4,9 @@
   import Section from "./lib/Section.svelte";
   import Upload from "./lib/Upload.svelte";
 
+  /** @type {any} */
+  let module;
+
   /** @type {File | undefined} */
   let file = undefined;
 
@@ -15,13 +18,26 @@
 
   const TILES_PER_PIXEL = 1;
 
-  const process = Module.cwrap("process", "string", [
-    "number",
-    "number",
-    "number",
-    "number",
-    "number",
-  ]);
+  /** @type {(in_ptr: number,out_ptr: number, width: number, height: number, tiles_per_pixel: number) => string}*/
+  let process;
+
+  async function initModule() {
+    const res = await fetch("./out.js");
+    const blob = await res.blob();
+    const code = await blob.text();
+    module = await Function(
+      '"use strict"; ' + code.replace("var Module = ", "return")
+    )()();
+    process = module.cwrap("process", "string", [
+      "number",
+      "number",
+      "number",
+      "number",
+      "number",
+    ]);
+  }
+
+  initModule();
 
   /**
    * @param {File} from
@@ -44,13 +60,13 @@
 
       const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
-      buffer_from = Module._create_buffer(img.width, img.height);
-      buffer_to = Module._create_buffer(
+      buffer_from = module._create_buffer(img.width, img.height);
+      buffer_to = module._create_buffer(
         img.width * TILES_PER_PIXEL,
         img.height * TILES_PER_PIXEL
       );
 
-      Module.HEAP8.set(imageData.data, buffer_from);
+      module.HEAP8.set(imageData.data, buffer_from);
 
       performance.mark("proc-start");
       console.log("[js] Processing image...");
@@ -69,7 +85,7 @@
       canvas2.width = img.width * TILES_PER_PIXEL;
       canvas2.height = img.height * TILES_PER_PIXEL;
 
-      const data = Module.HEAPU8.subarray(
+      const data = module.HEAPU8.subarray(
         buffer_to,
         buffer_to + canvas2.width * canvas2.height * 4
       );
@@ -81,16 +97,27 @@
       ctx2.putImageData(previewData, 0, 0);
 
       previewUrl = canvas2.toDataURL("image/png");
+    } catch (e) {
+      console.error("Processing failed", e);
+      performance.mark("proc-end");
     } finally {
-      Module._destroy_buffer(buffer_from);
-      Module._destroy_buffer(buffer_to);
+      module._destroy_buffer(buffer_from);
+      module._destroy_buffer(buffer_to);
 
       performance.mark("end");
 
-      const totalTime = performance.measure("total time", "start", "end").duration.toFixed(0);
-      const prepTime = performance.measure("preparation time", "start", "proc-start").duration.toFixed(0);
-      const procTime = performance.measure("processing time", "proc-start", "proc-end").duration.toFixed(0);
-      const endTime = performance.measure("processing time", "proc-end", "end").duration.toFixed(0);
+      const totalTime = performance
+        .measure("total time", "start", "end")
+        .duration.toFixed(0);
+      const prepTime = performance
+        .measure("preparation time", "start", "proc-start")
+        .duration.toFixed(0);
+      const procTime = performance
+        .measure("processing time", "proc-start", "proc-end")
+        .duration.toFixed(0);
+      const endTime = performance
+        .measure("processing time", "proc-end", "end")
+        .duration.toFixed(0);
 
       const label = `[js] Done. Took ${totalTime} ms total.`;
       console.group(label);
