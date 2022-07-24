@@ -1,0 +1,1 @@
+em++ -s "EXPORTED_RUNTIME_METHODS=['cwrap']" -s "EXPORTED_FUNCTIONS=['_process','_create_buffer','_destroy_buffer']" -s NO_EXIT_RUNTIME=1 -s ENVIRONMENT=web -s USE_ZLIB=1 -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB --no-entry -O3 -o ../../public/out.html src/main.cpp
