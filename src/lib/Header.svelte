@@ -37,7 +37,7 @@
     href="https://nicokandut.github.io/factorio-solar-art/"
     target="_newtab"
   >
-    <img src="/solar_panel.png" alt="Solar Art Generator" />
+    <img src="./solar_panel.png" alt="Solar Art Generator" />
   </a>
 </header>
 
