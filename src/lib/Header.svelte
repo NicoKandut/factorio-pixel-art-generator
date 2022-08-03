@@ -43,7 +43,7 @@
 
 <style>
   header {
-    grid-area: 1/1/2/3;
+    grid-area: 1/1/2/4;
     display: flex;
     align-items: center;
     gap: var(--spacing-grid);

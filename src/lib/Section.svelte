@@ -22,6 +22,8 @@
     background-color: var(--section-color);
     box-shadow: var(--shadow-elevation), var(--shadow-edge);
     contain: strict;
+    height: 100%;
+    box-sizing: border-box;
   }
 
   .title {

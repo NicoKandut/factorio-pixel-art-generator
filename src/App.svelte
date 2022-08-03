@@ -1,5 +1,6 @@
 <script>
   import Button from "./lib/Button.svelte";
+  import ErrorMessage from "./lib/ErrorMessage.svelte";
   import Header from "./lib/Header.svelte";
   import Section from "./lib/Section.svelte";
   import Upload from "./lib/Upload.svelte";
@@ -8,18 +9,29 @@
   let module;
 
   /** @type {File | undefined} */
-  let file = undefined;
+  let file;
 
   /** @type {string | undefined} */
-  let previewUrl = undefined;
+  let previewUrl;
 
   /** @type {string | undefined} */
-  let importString = undefined;
+  let importString;
 
   const TILES_PER_PIXEL = 1;
 
-  /** @type {(in_ptr: number,out_ptr: number, width: number, height: number, tiles_per_pixel: number) => string}*/
+  /** @type {(in_ptr: number,out_ptr: number, width: number, height: number, tiles_per_pixel: number, mode: number) => string}*/
   let process;
+
+  /** @type {Error} */
+  let error;
+
+  /** @type {number} */
+  let mode;
+
+  const MODE = {
+    GRAYSCALE: 0,
+    COLORED: 1,
+  };
 
   async function initModule() {
     const res = await fetch("./out.js");
@@ -34,7 +46,10 @@
       "number",
       "number",
       "number",
+      "number",
     ]);
+
+    window.module = module;
   }
 
   initModule();
@@ -69,13 +84,13 @@
       module.HEAP8.set(imageData.data, buffer_from);
 
       performance.mark("proc-start");
-      console.log("[js] Processing image...");
       importString = process(
         buffer_from,
         buffer_to,
         img.width,
         img.height,
-        TILES_PER_PIXEL
+        TILES_PER_PIXEL,
+        mode
       );
       performance.mark("proc-end");
 
@@ -97,38 +112,27 @@
       ctx2.putImageData(previewData, 0, 0);
 
       previewUrl = canvas2.toDataURL("image/png");
-    } catch (e) {
-      console.error("Processing failed", e);
-      performance.mark("proc-end");
-    } finally {
-      module._destroy_buffer(buffer_from);
-      module._destroy_buffer(buffer_to);
 
       performance.mark("end");
 
-      const totalTime = performance
-        .measure("total time", "start", "end")
-        .duration.toFixed(0);
-      const prepTime = performance
-        .measure("preparation time", "start", "proc-start")
-        .duration.toFixed(0);
-      const procTime = performance
-        .measure("processing time", "proc-start", "proc-end")
-        .duration.toFixed(0);
-      const endTime = performance
-        .measure("processing time", "proc-end", "end")
-        .duration.toFixed(0);
+      printPerformanceStatistics();
+    } catch (e) {
+      error = e;
+    } finally {
+      module._destroy_buffer(buffer_from);
+      module._destroy_buffer(buffer_to);
+    }
+  }
 
-      const label = `[js] Done. Took ${totalTime} ms total.`;
-      console.group(label);
-      console.info("Preparation", prepTime, "ms");
-      console.info("Processing", procTime, "ms");
-      console.info("End", endTime, "ms");
-      console.groupEnd();
+  $: {
+    if (file) {
+      processFile(file);
+      mode = mode;
     }
   }
 
   async function copy() {
+    // todo: guard this with capability check
     if (importString === undefined) {
       return;
     }
@@ -141,6 +145,7 @@
   }
 
   async function download() {
+    // todo: guard this with capability check
     if (importString === undefined) {
       return;
     }
@@ -161,10 +166,43 @@
     await writableStream.write(importString);
     await writableStream.close();
   }
+
+  function printPerformanceStatistics() {
+    const totalTime = performance
+      .measure("total time", "start", "end")
+      .duration.toFixed(0);
+    const prepTime = performance
+      .measure("preparation time", "start", "proc-start")
+      .duration.toFixed(0);
+    const procTime = performance
+      .measure("processing time", "proc-start", "proc-end")
+      .duration.toFixed(0);
+    const endTime = performance
+      .measure("processing time", "proc-end", "end")
+      .duration.toFixed(0);
+
+    const label = `[js] Done. Took ${totalTime} ms total.`;
+    console.group(label);
+    console.info("Preparation", prepTime, "ms");
+    console.info("Processing", procTime, "ms");
+    console.info("End", endTime, "ms");
+    console.groupEnd();
+  }
 </script>
 
 <main>
   <Header />
+  <Section title="Settings">
+    <div slot="content">
+      <label>
+        <span>Mode</span>
+        <select bind:value={mode}>
+          <option value={MODE.GRAYSCALE}>Grayscale</option>
+          <option value={MODE.COLORED}>[MOD] Concrete Tints</option>
+        </select>
+      </label>
+    </div>
+  </Section>
   <Section title="Source">
     <svelte:fragment slot="actions">
       {#if file !== undefined}
@@ -181,9 +219,8 @@
     <svelte:fragment slot="content">
       {#if file === undefined}
         <Upload
-          on:upload={async (e) => {
+          on:upload={(e) => {
             file = e.detail;
-            await processFile(file);
           }}
         />
       {:else}
@@ -214,6 +251,8 @@
     </svelte:fragment>
   </Section>
 </main>
+
+<ErrorMessage {error} />
 
 <style>
   :global(:root) {
@@ -259,7 +298,7 @@
     height: 100%;
     max-height: 100vh;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 200px 1fr 1fr;
     grid-template-rows: auto 1fr;
     gap: var(--spacing-grid);
     padding: var(--spacing-grid);
